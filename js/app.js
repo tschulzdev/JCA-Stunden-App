@@ -1,7 +1,7 @@
 /**
  * Jugendclub – Arbeitsstunden
  * -----------------------------
- * Single-Page-App mit LocalStorage.
+ * Single-Page-App mit LocalStorage + optional Firestore (Member-Einreichung / Admin-Freigabe).
  * Datenmodell (siehe README-Kommentare unten):
  * - members:    { id, name }
  * - entries:    { id, memberId, date, activity, hours }
@@ -161,13 +161,45 @@
     "member-detail": $("#view-member-detail"),
     timer: $("#view-timer"),
     "filter-export": $("#view-filter-export"),
+    "access-denied": $("#view-access-denied"),
+    "member-submit": $("#view-member-submit"),
+    admin: $("#view-admin"),
   };
 
   let currentMemberDetailId = null;
 
+  /** @type {null | (() => void)} */
+  let adminFirestoreUnsub = null;
+
+  function tearDownAdmin() {
+    if (typeof adminFirestoreUnsub === "function") {
+      adminFirestoreUnsub();
+      adminFirestoreUnsub = null;
+    }
+  }
+
+  /**
+   * UI-Modus: Member-Seiten blenden Admin-Navigation aus (kein Ersatz für echte Sicherheit).
+   * @param {"default" | "member" | "restricted"} mode
+   */
+  function setAppMode(mode) {
+    document.body.classList.remove("app-mode--member", "app-mode--restricted");
+    const titleEl = $("#app-title-text");
+    if (mode === "member") {
+      document.body.classList.add("app-mode--member");
+      if (titleEl) titleEl.textContent = "Stunden melden";
+    } else if (mode === "restricted") {
+      document.body.classList.add("app-mode--restricted");
+      if (titleEl) titleEl.textContent = "Zugriff";
+    } else {
+      if (titleEl) titleEl.textContent = "Arbeitsstunden";
+    }
+  }
+
   function setActiveNav(viewName) {
     $$(".nav-btn").forEach((btn) => {
-      btn.classList.toggle("nav-btn--active", btn.dataset.view === viewName);
+      const active = viewName != null && btn.dataset.view === viewName;
+      btn.classList.toggle("nav-btn--active", active);
     });
   }
 
@@ -175,11 +207,16 @@
     Object.keys(views).forEach((key) => {
       views[key].classList.toggle("view--active", key === name);
     });
-    const navName =
-      name === "member-detail" ? "home" : name === "add-entry" && options.fromNav ? "add-entry" : name;
-    if (name !== "member-detail") {
+
+    if (name === "access-denied" || name === "member-submit") {
+      setActiveNav(null);
+    } else if (name === "admin") {
+      setActiveNav("admin");
+    } else if (name !== "member-detail") {
+      const navName =
+        name === "member-detail" ? "home" : name === "add-entry" && options.fromNav ? "add-entry" : name;
       setActiveNav(
-        ["home", "add-entry", "activities", "timer", "filter-export"].includes(navName)
+        ["home", "add-entry", "activities", "timer", "filter-export", "admin"].includes(navName)
           ? navName === "home" && name === "add-entry"
             ? "add-entry"
             : navName
@@ -188,6 +225,7 @@
     } else {
       setActiveNav("home");
     }
+
     if (name === "add-entry" && !options.skipHash) {
       location.hash = options.editId ? "#/eintrag/" + options.editId : "#/stunde";
     } else if (name === "home" && !options.skipHash) {
@@ -200,12 +238,124 @@
       location.hash = "#/timer";
     } else if (name === "filter-export" && !options.skipHash) {
       location.hash = "#/export";
+    } else if (name === "admin" && !options.skipHash) {
+      location.hash = "#/admin";
     }
   }
 
+  function formatCloudTimestamp(ts) {
+    if (!ts || typeof ts.toDate !== "function") return "—";
+    try {
+      return ts.toDate().toLocaleString("de-DE");
+    } catch {
+      return "—";
+    }
+  }
+
+  function mountAdminFirestore() {
+    tearDownAdmin();
+    const tbody = $("#admin-pending-body");
+    const empty = $("#admin-pending-empty");
+    const table = $("#admin-pending-table");
+    if (!tbody || !empty) return;
+
+    if (!window.JCFirestore || !JCFirestore.isReady()) {
+      tbody.innerHTML = "";
+      empty.textContent =
+        "Firebase ist nicht konfiguriert. Tragen Sie die Projektdaten in js/firebase-config.js ein und laden Sie die Seite neu.";
+      empty.classList.remove("hidden");
+      if (table) table.classList.add("hidden");
+      return;
+    }
+
+    if (table) table.classList.remove("hidden");
+    empty.textContent = "Keine ausstehenden Einträge.";
+    empty.classList.add("hidden");
+
+    adminFirestoreUnsub = JCFirestore.subscribePendingEntries(
+      (rows) => {
+        empty.classList.toggle("hidden", rows.length > 0);
+        tbody.innerHTML = "";
+        rows.forEach((row) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td>" +
+            escapeHtml(formatCloudTimestamp(row.createdAt)) +
+            "</td>" +
+            "<td>" +
+            escapeHtml(String(row.name || "")) +
+            "</td>" +
+            "<td>" +
+            escapeHtml(String(row.activity || "")) +
+            "</td>" +
+            "<td>" +
+            escapeHtml(formatHours(Number(row.hours) || 0)) +
+            "</td>" +
+            '<td class="col-actions"></td>';
+          const td = tr.querySelector(".col-actions");
+          const ap = document.createElement("button");
+          ap.type = "button";
+          ap.className = "btn btn--primary btn--small";
+          ap.textContent = "Approve";
+          ap.addEventListener("click", () => {
+            JCFirestore.setEntryStatus(row.id, "approved")
+              .then(() => showToast("Approved."))
+              .catch((e) => showToast(e.message || "Fehler"));
+          });
+          const rj = document.createElement("button");
+          rj.type = "button";
+          rj.className = "btn btn--danger btn--small";
+          rj.textContent = "Reject";
+          rj.addEventListener("click", () => {
+            JCFirestore.setEntryStatus(row.id, "rejected")
+              .then(() => showToast("Rejected."))
+              .catch((e) => showToast(e.message || "Fehler"));
+          });
+          td.appendChild(ap);
+          td.appendChild(rj);
+          tbody.appendChild(tr);
+        });
+      },
+      (err) => {
+        console.error(err);
+        showToast(err.message || "Firestore-Fehler");
+      }
+    );
+  }
+
   function parseHash() {
-    const h = (location.hash || "#/").replace(/^#/, "") || "/";
-    const parts = h.split("/").filter(Boolean);
+    const raw = (location.hash || "#/").replace(/^#/, "") || "/";
+    const pathOnly = raw.split("?")[0];
+    const parts = pathOnly.split("/").filter(Boolean);
+
+    if (parts[0] === "submit") {
+      tearDownAdmin();
+      const params =
+        typeof JCUrlParams !== "undefined" ? JCUrlParams.getMergedParams() : {};
+      const expectedKey =
+        typeof JC_MEMBER_SUBMIT_KEY !== "undefined" ? JC_MEMBER_SUBMIT_KEY : "";
+      if (params.role !== "member" || !params.key || params.key !== expectedKey) {
+        setAppMode("restricted");
+        showView("access-denied", { skipHash: true });
+        return;
+      }
+      setAppMode("member");
+      showView("member-submit", { skipHash: true });
+      return;
+    }
+
+    setAppMode("default");
+
+    if (parts[0] !== "admin") {
+      tearDownAdmin();
+    }
+
+    if (parts[0] === "admin") {
+      showView("admin", { skipHash: true });
+      mountAdminFirestore();
+      return;
+    }
+
     if (parts[0] === "mitglied" && parts[1]) {
       currentMemberDetailId = parts[1];
       if (getMember(currentMemberDetailId)) {
@@ -500,8 +650,33 @@
         location.hash = "#/timer";
       } else if (v === "filter-export") {
         location.hash = "#/export";
+      } else if (v === "admin") {
+        location.hash = "#/admin";
       }
     });
+  });
+
+  $("#form-member-cloud-submit").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    const name = $("#cloud-submit-name").value.trim();
+    const activity = $("#cloud-submit-activity").value.trim();
+    const hours = parseFloat(String($("#cloud-submit-hours").value).replace(",", "."));
+    if (!name || !activity || !Number.isFinite(hours) || hours < 0) {
+      showToast("Bitte alle Felder gültig ausfüllen.");
+      return;
+    }
+    if (!window.JCFirestore || !JCFirestore.isReady()) {
+      showToast("Firebase ist nicht konfiguriert.");
+      return;
+    }
+    JCFirestore.submitMemberEntry({ name: name, activity: activity, hours: hours })
+      .then(function () {
+        showToast("Eingereicht – Status: pending.");
+        ev.target.reset();
+      })
+      .catch(function (e) {
+        showToast(e.message || "Senden fehlgeschlagen");
+      });
   });
 
   $("#form-entry").addEventListener("submit", (ev) => {

@@ -12,7 +12,7 @@
 
   <header class="app-header">
     <div class="header-top">
-      <h1 class="app-title">Arbeitsstunden</h1>
+      <h1 class="app-title"><span id="app-title-text">Arbeitsstunden</span></h1>
       <button type="button" class="btn-theme" id="btn-theme-toggle" aria-pressed="false" title="Darstellung umschalten">
         Dunkelmodus
       </button>
@@ -23,6 +23,7 @@
       <button type="button" class="nav-btn" data-view="activities">Tätigkeiten</button>
       <button type="button" class="nav-btn" data-view="timer">Timer</button>
       <button type="button" class="nav-btn" data-view="filter-export">Filter / Export</button>
+      <button type="button" class="nav-btn" data-view="admin">Cloud-Freigaben</button>
     </nav>
   </header>
 
@@ -196,6 +197,67 @@
       </div>
       <p id="filter-empty" class="empty-hint hidden">Keine Einträge für die gewählten Filter.</p>
     </section>
+
+    <!-- Zugriff verweigert (Member-Route ohne gültige Parameter) -->
+    <section id="view-access-denied" class="view" aria-labelledby="denied-heading">
+      <div class="form-card access-denied-card">
+        <h2 id="denied-heading">Zugriff verweigert</h2>
+        <p class="intro">
+          Diese Seite ist nur mit gültigem Mitglied-Link erreichbar (<code>role=member</code> und
+          <code>key=…</code> in der URL). Bitte den QR-Code bzw. Link vom Jugendclub nutzen.
+        </p>
+      </div>
+    </section>
+
+    <!-- Mitglied: Stunden nur zur Freigabe einreichen (Firestore) -->
+    <section id="view-member-submit" class="view" aria-labelledby="member-submit-heading">
+      <h2 id="member-submit-heading">Arbeitsstunden einreichen</h2>
+      <p class="intro">Ihre Angaben werden zur Prüfung gespeichert. Sie erscheinen erst nach Freigabe in der Verwaltung.</p>
+      <form id="form-member-cloud-submit" class="form-card" novalidate>
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input type="text" id="cloud-submit-name" name="name" required maxlength="200" autocomplete="name" />
+        </label>
+        <label class="field">
+          <span class="field__label">Tätigkeit</span>
+          <input type="text" id="cloud-submit-activity" name="activity" required maxlength="200" />
+        </label>
+        <label class="field">
+          <span class="field__label">Stunden</span>
+          <input type="number" id="cloud-submit-hours" name="hours" min="0" step="0.01" required />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary" id="btn-cloud-submit">Absenden</button>
+        </div>
+      </form>
+      <p id="member-submit-footnote" class="intro footnote">
+        Hinweis: Technisch ist dies keine sichere Anmeldung – nur ein einfacher Zugang per Link.
+      </p>
+    </section>
+
+    <!-- Admin: ausstehende Cloud-Einträge -->
+    <section id="view-admin" class="view" aria-labelledby="admin-heading">
+      <h2 id="admin-heading">Cloud – ausstehende Einträge</h2>
+      <p class="intro" id="admin-firestore-hint">
+        Einträge aus der Firestore-Collection <code>entries</code> mit Status <code>pending</code>.
+        Firebase muss in <code>js/firebase-config.js</code> eingetragen sein; Schutz über Firestore Rules.
+      </p>
+      <div class="table-wrap">
+        <table class="data-table" id="admin-pending-table">
+          <thead>
+            <tr>
+              <th scope="col">Eingegangen</th>
+              <th scope="col">Name</th>
+              <th scope="col">Tätigkeit</th>
+              <th scope="col">Stunden</th>
+              <th scope="col" class="col-actions">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="admin-pending-body"></tbody>
+        </table>
+      </div>
+      <p id="admin-pending-empty" class="empty-hint hidden">Keine ausstehenden Einträge oder Firebase nicht verbunden.</p>
+    </section>
   </main>
 
   <!-- Dialog: Mitglied hinzufügen -->
@@ -242,6 +304,11 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/url-params.js"></script>
+  <script src="js/firestore-service.js"></script>
   <script src="js/app.js" defer></script>
 </body>
 </html>

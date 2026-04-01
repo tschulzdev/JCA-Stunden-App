@@ -717,3 +717,20 @@ html.theme-dark .btn--ghost:focus-visible {
 .hidden {
   display: none !important;
 }
+
+/* Member- / Zugriff-verweigert-Modus: keine Admin-Navigation */
+.app-mode--member .main-nav,
+.app-mode--member .btn-theme,
+.app-mode--restricted .main-nav,
+.app-mode--restricted .btn-theme {
+  display: none !important;
+}
+
+.access-denied-card code {
+  font-size: 0.85em;
+}
+
+.footnote {
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
