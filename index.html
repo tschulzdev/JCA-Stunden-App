@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Arbeitsstunden-Erfassung für den Jugendclub" />
+  <title>Jugendclub – Arbeitsstunden</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+  <header class="app-header">
+    <div class="header-top">
+      <h1 class="app-title"><span id="app-title-text">Arbeitsstunden</span></h1>
+      <button type="button" class="btn-theme" id="btn-theme-toggle" aria-pressed="false" title="Darstellung umschalten">
+        Dunkelmodus
+      </button>
+    </div>
+    <nav class="main-nav" aria-label="Hauptnavigation">
+      <button type="button" class="nav-btn" data-view="home">Mitglieder</button>
+      <button type="button" class="nav-btn" data-view="add-entry">Stunde</button>
+      <button type="button" class="nav-btn" data-view="activities">Tätigkeiten</button>
+      <button type="button" class="nav-btn" data-view="timer">Timer</button>
+      <button type="button" class="nav-btn" data-view="filter-export">Filter / Export</button>
+      <button type="button" class="nav-btn" data-view="admin">Cloud-Freigaben</button>
+    </nav>
+  </header>
+
+  <main id="main" class="main">
+    <!-- 1) Homescreen: Mitglieder -->
+    <section id="view-home" class="view view--active" aria-labelledby="home-heading">
+      <h2 id="home-heading" class="sr-only">Mitgliederübersicht</h2>
+      <div class="toolbar">
+        <button type="button" class="btn btn--primary" id="btn-add-member">Mitglied hinzufügen</button>
+        <button type="button" class="btn btn--secondary" id="btn-goto-add-entry">Stunde hinzufügen</button>
+      </div>
+      <div class="member-sort-bar">
+        <label class="member-sort-label" for="member-sort">Sortierung</label>
+        <select id="member-sort" class="member-sort-select" aria-label="Mitglieder sortieren">
+          <option value="alpha">Alphabetisch (A–Z)</option>
+          <option value="hours">Nach Stunden (meiste zuerst)</option>
+        </select>
+      </div>
+      <ul id="member-list" class="member-list"></ul>
+      <p id="member-empty" class="empty-hint hidden">Noch keine Mitglieder. Legen Sie zuerst ein Mitglied an.</p>
+    </section>
+
+    <!-- 2) Stunde hinzufügen / bearbeiten -->
+    <section id="view-add-entry" class="view" aria-labelledby="entry-heading">
+      <h2 id="entry-heading">Stunde erfassen</h2>
+      <form id="form-entry" class="form-card" novalidate>
+        <input type="hidden" id="entry-id" name="entryId" value="" />
+
+        <label class="field">
+          <span class="field__label">Mitglied</span>
+          <select id="entry-member" name="memberId" required></select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Datum</span>
+          <input type="date" id="entry-date" name="date" required />
+        </label>
+
+        <div class="field field--row">
+          <label class="field field--grow">
+            <span class="field__label">Tätigkeit</span>
+            <select id="entry-activity" name="activity" required></select>
+          </label>
+          <button type="button" class="btn btn--ghost" id="btn-quick-add-activity" title="Neue Tätigkeit">+ Tätigkeit</button>
+        </div>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset__legend">Arbeitszeit</legend>
+          <label class="field">
+            <span class="field__label">Direkt in Stunden (z. B. 1,5)</span>
+            <input type="number" id="entry-hours-direct" name="hoursDirect" min="0" step="0.01" placeholder="leer lassen wenn Start/Ende" />
+          </label>
+          <p class="field-hint">Oder Start- und Endzeit – die Dauer wird berechnet.</p>
+          <div class="grid-2">
+            <label class="field">
+              <span class="field__label">Startzeit</span>
+              <input type="time" id="entry-start" name="start" />
+            </label>
+            <label class="field">
+              <span class="field__label">Endzeit</span>
+              <input type="time" id="entry-end" name="end" />
+            </label>
+          </div>
+          <p id="entry-computed-duration" class="computed-duration" aria-live="polite"></p>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary" id="btn-save-entry">Speichern</button>
+          <button type="button" class="btn btn--ghost" id="btn-cancel-entry">Abbrechen</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 3) Tätigkeiten -->
+    <section id="view-activities" class="view" aria-labelledby="activities-heading">
+      <h2 id="activities-heading">Tätigkeiten</h2>
+      <p class="intro">Legen Sie Tätigkeiten an – sie erscheinen in allen Auswahllisten.</p>
+      <form id="form-new-activity" class="inline-form">
+        <input type="text" id="new-activity-name" placeholder="Neue Tätigkeit" maxlength="120" required />
+        <button type="submit" class="btn btn--primary">Hinzufügen</button>
+      </form>
+      <ul id="activity-list" class="activity-list"></ul>
+    </section>
+
+    <!-- 4) Mitglied-Detail -->
+    <section id="view-member-detail" class="view" aria-labelledby="detail-heading">
+      <button type="button" class="btn btn--back" id="btn-back-from-detail" aria-label="Zurück zur Mitgliederliste">← Zurück</button>
+      <h2 id="detail-heading"><span id="detail-member-name"></span></h2>
+      <p class="detail-total">Gesamt: <strong id="detail-total-hours">0</strong> h</p>
+      <div class="table-wrap">
+        <table class="data-table" id="detail-entries-table">
+          <thead>
+            <tr>
+              <th scope="col">Datum</th>
+              <th scope="col">Tätigkeit</th>
+              <th scope="col">Stunden</th>
+              <th scope="col" class="col-actions">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="detail-entries-body"></tbody>
+        </table>
+      </div>
+      <p id="detail-empty" class="empty-hint hidden">Noch keine Einträge für dieses Mitglied.</p>
+    </section>
+
+    <!-- 5) Timer (mehrere parallel) -->
+    <section id="view-timer" class="view" aria-labelledby="timer-heading">
+      <h2 id="timer-heading">Timer</h2>
+      <p class="intro">Mehrere Mitglieder können gleichzeitig getrackt werden. Jeder laufende Timer hat eine eigene Anzeige und einen Stop-Button.</p>
+      <div class="timer-card timer-card--new">
+        <h3 class="timer-subheading">Neuen Timer starten</h3>
+        <label class="field">
+          <span class="field__label">Mitglied</span>
+          <select id="timer-new-member"></select>
+        </label>
+        <label class="field">
+          <span class="field__label">Tätigkeit</span>
+          <select id="timer-new-activity"></select>
+        </label>
+        <button type="button" class="btn btn--primary btn--large" id="btn-timer-add">Timer starten</button>
+      </div>
+      <h3 class="timer-subheading timer-subheading--list">Laufende Timer</h3>
+      <ul id="timer-active-list" class="timer-active-list" aria-live="polite"></ul>
+      <p id="timer-active-empty" class="empty-hint">Keine aktiven Timer.</p>
+    </section>
+
+    <!-- 6) Filter & Export -->
+    <section id="view-filter-export" class="view" aria-labelledby="filter-heading">
+      <h2 id="filter-heading">Einträge filtern & exportieren</h2>
+      <form id="form-filters" class="form-card filters-form">
+        <label class="field">
+          <span class="field__label">Mitglied</span>
+          <select id="filter-member">
+            <option value="">Alle</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Tätigkeit</span>
+          <select id="filter-activity">
+            <option value="">Alle</option>
+          </select>
+        </label>
+        <div class="grid-2">
+          <label class="field">
+            <span class="field__label">Datum von</span>
+            <input type="date" id="filter-date-from" />
+          </label>
+          <label class="field">
+            <span class="field__label">Datum bis</span>
+            <input type="date" id="filter-date-to" />
+          </label>
+        </div>
+        <button type="submit" class="btn btn--secondary">Filter anwenden</button>
+      </form>
+      <div class="toolbar toolbar--wrap">
+        <button type="button" class="btn btn--primary" id="btn-export-csv">CSV exportieren</button>
+        <button type="button" class="btn btn--primary" id="btn-export-excel">Excel exportieren</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Mitglied</th>
+              <th scope="col">Datum</th>
+              <th scope="col">Tätigkeit</th>
+              <th scope="col">Stunden</th>
+            </tr>
+          </thead>
+          <tbody id="filter-results-body"></tbody>
+        </table>
+      </div>
+      <p id="filter-empty" class="empty-hint hidden">Keine Einträge für die gewählten Filter.</p>
+    </section>
+
+    <!-- Zugriff verweigert (Member-Route ohne gültige Parameter) -->
+    <section id="view-access-denied" class="view" aria-labelledby="denied-heading">
+      <div class="form-card access-denied-card">
+        <h2 id="denied-heading">Zugriff verweigert</h2>
+        <p class="intro">
+          Diese Seite ist nur mit gültigem Mitglied-Link erreichbar (<code>role=member</code> und
+          <code>key=…</code> in der URL). Bitte den QR-Code bzw. Link vom Jugendclub nutzen.
+        </p>
+      </div>
+    </section>
+
+    <!-- Mitglied: Stunden nur zur Freigabe einreichen (Firestore) -->
+    <section id="view-member-submit" class="view" aria-labelledby="member-submit-heading">
+      <h2 id="member-submit-heading">Arbeitsstunden einreichen</h2>
+      <p class="intro">
+        Ihre Angaben werden zur Prüfung gespeichert. Die Mitgliederliste entspricht den Einträgen in dieser App auf
+        <strong>diesem Gerät</strong> (lokal). Fehlt jemand, bitte zuerst „Hinzufügen“ nutzen.
+      </p>
+      <form id="form-member-cloud-submit" class="form-card" novalidate>
+        <label class="field">
+          <span class="field__label">Mitglied</span>
+          <select id="cloud-submit-member-select" name="memberId" required>
+            <option value="">Bitte wählen…</option>
+          </select>
+        </label>
+        <div class="toolbar cloud-member-toolbar">
+          <button type="button" class="btn btn--secondary" id="btn-cloud-member-add">Mitglied hinzufügen</button>
+          <button type="button" class="btn btn--ghost" id="btn-cloud-member-edit">Namen bearbeiten</button>
+        </div>
+        <label class="field">
+          <span class="field__label">Tätigkeit</span>
+          <input type="text" id="cloud-submit-activity" name="activity" required maxlength="200" />
+        </label>
+        <label class="field">
+          <span class="field__label">Stunden</span>
+          <input type="number" id="cloud-submit-hours" name="hours" min="0" step="0.01" required />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary" id="btn-cloud-submit">Absenden</button>
+        </div>
+      </form>
+      <p id="member-submit-footnote" class="intro footnote">
+        Hinweis: Technisch ist dies keine sichere Anmeldung – nur ein einfacher Zugang per Link.
+      </p>
+    </section>
+
+    <!-- Admin: ausstehende Cloud-Einträge -->
+    <section id="view-admin" class="view" aria-labelledby="admin-heading">
+      <h2 id="admin-heading">Cloud – ausstehende Einträge</h2>
+      <p class="intro" id="admin-firestore-hint">
+        Einträge aus der Firestore-Collection <code>entries</code> mit Status <code>pending</code>.
+        Firebase muss in <code>js/firebase-config.js</code> eingetragen sein; Schutz über Firestore Rules.
+      </p>
+      <div class="table-wrap">
+        <table class="data-table" id="admin-pending-table">
+          <thead>
+            <tr>
+              <th scope="col">Eingegangen</th>
+              <th scope="col">Name</th>
+              <th scope="col">Tätigkeit</th>
+              <th scope="col">Stunden</th>
+              <th scope="col" class="col-actions">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="admin-pending-body"></tbody>
+        </table>
+      </div>
+      <p id="admin-pending-empty" class="empty-hint hidden">Keine ausstehenden Einträge oder Firebase nicht verbunden.</p>
+    </section>
+  </main>
+
+  <!-- Dialog: Mitglied hinzufügen -->
+  <dialog id="dialog-member" class="modal">
+    <form method="dialog" id="form-member-dialog" class="modal__inner">
+      <h3>Neues Mitglied</h3>
+      <label class="field">
+        <span class="field__label">Name</span>
+        <input type="text" id="dialog-member-name" required maxlength="200" />
+      </label>
+      <div class="modal__actions">
+        <button type="submit" class="btn btn--primary" value="ok">Speichern</button>
+        <button type="button" class="btn btn--ghost" id="dialog-member-cancel">Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dialog: Mitglied auf Melde-Seite (lokal) -->
+  <dialog id="dialog-cloud-member" class="modal">
+    <div class="modal__inner">
+      <h3 id="dialog-cloud-member-title">Mitglied</h3>
+      <input type="hidden" id="dialog-cloud-member-id" value="" />
+      <label class="field">
+        <span class="field__label">Name</span>
+        <input type="text" id="dialog-cloud-member-name" maxlength="200" required />
+      </label>
+      <div class="modal__actions">
+        <button type="button" class="btn btn--primary" id="dialog-cloud-member-save">Speichern</button>
+        <button type="button" class="btn btn--ghost" id="dialog-cloud-member-cancel">Abbrechen</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Dialog: Tätigkeit schnell hinzufügen -->
+  <dialog id="dialog-activity" class="modal">
+    <form method="dialog" id="form-activity-dialog" class="modal__inner">
+      <h3>Neue Tätigkeit</h3>
+      <label class="field">
+        <span class="field__label">Name</span>
+        <input type="text" id="dialog-activity-name" required maxlength="120" />
+      </label>
+      <div class="modal__actions">
+        <button type="submit" class="btn btn--primary" value="ok">Hinzufügen</button>
+        <button type="button" class="btn btn--ghost" id="dialog-activity-cancel">Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dialog: Timer gestoppt -->
+  <dialog id="dialog-timer-save" class="modal">
+    <form method="dialog" id="form-timer-save" class="modal__inner">
+      <h3>Zeit speichern?</h3>
+      <p id="timer-save-summary" class="modal__text"></p>
+      <div class="modal__actions">
+        <button type="submit" class="btn btn--primary" value="ok">Als Eintrag speichern</button>
+        <button type="button" class="btn btn--ghost" id="dialog-timer-discard">Verwerfen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Firestore: modulares SDK wird aus js/firestore-service.js geladen (kein compat-Bundle nötig) -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/url-params.js"></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>
