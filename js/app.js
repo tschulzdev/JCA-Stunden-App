@@ -298,8 +298,10 @@
           ap.className = "btn btn--primary btn--small";
           ap.textContent = "Approve";
           ap.addEventListener("click", () => {
-            JCFirestore.setEntryStatus(row.id, "approved")
-              .then(() => showToast("Approved."))
+            JCFirestore.approveEntry(row.id)
+              .then(function (ok) {
+                if (ok) showToast("Approved.");
+              })
               .catch((e) => showToast(e.message || "Fehler"));
           });
           const rj = document.createElement("button");
@@ -1244,10 +1246,41 @@ ${rowsXml}
     exportExcelXml();
   });
 
-  // --- Init ---
-  applyTheme();
-  fillMemberSelects();
-  fillActivitySelects();
-  fillTimerNewForm();
-  parseHash();
+  // --- Init: Firestore-Modul (ESM) laden, dann App starten ---
+  function startApp() {
+    applyTheme();
+    fillMemberSelects();
+    fillActivitySelects();
+    fillTimerNewForm();
+    parseHash();
+  }
+
+  function stubFirestore() {
+    window.JCFirestore = {
+      isReady: function () {
+        return false;
+      },
+      submitMemberEntry: function () {
+        return Promise.reject(new Error("Firestore-Modul nicht geladen."));
+      },
+      subscribePendingEntries: function (_onNext, onError) {
+        if (onError) onError(new Error("Firestore-Modul nicht geladen."));
+        return function () {};
+      },
+      setEntryStatus: function () {
+        return Promise.reject(new Error("Firestore-Modul nicht geladen."));
+      },
+      approveEntry: function () {
+        return Promise.resolve(false);
+      },
+    };
+  }
+
+  import("./firestore-service.js")
+    .then(startApp)
+    .catch(function (err) {
+      console.error("[boot] firestore-service:", err);
+      if (!window.JCFirestore) stubFirestore();
+      startApp();
+    });
 })();
